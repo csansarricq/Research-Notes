@@ -1,0 +1,275 @@
+---
+title: "Research_notes"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+library(haven)
+
+NHANES_DAT <- read_spss("/Users/evasa/OneDrive/Desktop/BIOS 620/Research Notes/NHANES_RN1.sav")
+head(NHANES_DAT)
+
+ls(NHANES_DAT)
+
+#i'll try to fill in for the NA values after
+# want to see Blood Urea = exactage, physical activity, creatinin, male
+# LBXSBU~ Exactage + phy_f + Male + elevated creatinin factor? 
+#take out the creatinin factor along with the elevated together
+#thats too complicated
+
+#checking for the Blood Urea Nitrogen 6 to 24mg/dl is considered normal
+summary(NHANES_DAT$LBXSBU)
+
+summary(NHANES_DAT$physical_activity)
+
+#summary for creatinin
+summary(NHANES_DAT$LBXSCR)
+table(NHANES_DAT$LBXSCR)
+
+#creatinin
+hist(NHANES_DAT$LBXSCR)
+
+
+
+cc <- complete.cases(
+    NHANES_DAT[, c("LBXSBU", "Male", "Exactage", "LBXSCR", "phy_f")]
+)
+NHANES_CC <- NHANES_DAT[cc, ]
+
+
+
+
+
+#trying to normalize 
+
+norm_fun <- function(x) {
+    return((x - min(x, na.rm = TRUE)) / 
+             (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+  }
+
+creat_norm <- as.data.frame()
+
+
+#from what i've read the output var does not have to be
+#normalized in lin reg with a var that large
+hist(NHANES_DAT$LBXSBU)
+?rnorm
+
+range(NHANES_CC$Exactage)
+summary(NHANES_CC$Exactage)
+
+
+table(NHANES_CC$Male)
+
+```
+
+
+
+
+
+
+```{r}
+##organize data set levels for physical activity
+
+summary(NHANES_DAT$physical_activity)
+range(NHANES_DAT$physical_activity)
+
+
+phy_lvl <- attributes(NHANES_CC$physical_activity)$labels
+phy_lvl
+
+
+
+NHANES_CC$phy_f <- factor(NHANES_CC$physical_activity, levels = phy_lvl,
+                           labels = names(phy_lvl))
+
+table(NHANES_CC$phy_f)
+
+
+NHANES_CC$phy_f <- relevel(NHANES_CC$phy_f, ref = "Did not do vigorous or moderate activity" )
+
+
+
+#basic_look <- lm(NHANES_DAT$LBXSBU ~1 + NHANES_DAT$LBXSCR)
+
+summary(basic_look)
+
+#range(NHANES_DAT$Male)
+
+
+
+boxplot(NHANES_CC$LBXSBU~NHANES_CC$phy_f)
+
+
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+
+#creatinine dummy vars
+#I didnt think it was necessary to normalize the data for creatinin since
+#we are using these criteria here 
+
+?NA
+NHANES_CC$SCr_elevated<-NA
+NHANES_CC$SCr_elevated[NHANES_CC$Male==1]<-ifelse(NHANES_CC$LBXSCR[NHANES_CC$Male==1]>=1.2,1,0)
+NHANES_CC$SCr_elevated[NHANES_CC$Male==0]<-ifelse(NHANES_CC$LBXSCR[NHANES_CC$Male==0]>=1.1,1,0)
+
+table(NHANES_CC$SCr_elevated)
+table(NHANES_CC$SCr_elevated[NHANES_CC$Male ==1])
+table(NHANES_CC$SCr_elevated[NHANES_CC$Male ==0])
+
+#we already know this is binomal
+boxplot(NHANES_CC$LBXSBU~NHANES_CC$SCr_elevated)
+
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+```{r}
+
+#this is the basic lin regression 
+test_fit <- lm(NHANES_CC$LBXSBU ~1 + NHANES_CC$phy_f +NHANES_CC$Male  + NHANES_CC$SCr_elevated + NHANES_CC$Exactage)
+summary(test_fit)
+
+plot(test_fit)
+tab_model(test_fit)
+
+```
+
+```{r}
+library(ggplot2)
+library(ggfortify)
+
+
+#residuals are not normally distributed 
+#will need to adjust
+hist_r<- qplot(test_fit$residuals)
+
+hist_r
+
+hist_log_r<- qplot(log_fit$residuals)
+
+hist_log_r
+
+?qplot
+```
+
+```{r}
+
+#will log transform the data to have a normalized residual dist
+
+log_fit <- lm(log(NHANES_CC$LBXSBU) ~1 + NHANES_CC$Male + NHANES_CC$phy_f + NHANES_CC$SCr_elevated + NHANES_CC$Exactage)
+
+summary(log_fit)
+
+plot(log_fit)
+
+tab_model(log_fit)
+
+
+qqnorm(resid(log_fit))
+plot(log_fit)
+
+log_hist <- qplot(log_fit$residuals)
+
+log_hist  
+
+
+?ggplot
+
+```
+```{r}
+log_unadj <- lm(log(NHANES_CC$LBXSBU) ~1 + NHANES_CC$phy_f)
+summary(log_unadj)
+
+anova(log_unadj, log_fit)
+
+```
+
+
+```{r}
+install.packages("sjPlot")
+library(sjPlot)
+tab_model(log_fit)
+
+
+
+```
+
+```{r}
+
+#creating dummy variables to see if it would help knit
+NHANES_CC$Male_lev <-relevel(NHANES_CC$Male_lev, ref = 1)
+
+phy_lvl <- attributes(NHANES_CC$physical_activity)$labels
+phy_lvl
+
+NHANES_CC$phy_f <- factor(NHANES_CC$physical_activity, levels = phy_lvl,
+                           labels = names(phy_lvl))
+
+
+
+NHANES_CC$Vig_ACt <- ifelse(test = NHANES_CC$physical_activity == 1,  1, 0)
+NHANES_CC$Mod_ACT <- ifelse(test = NHANES_CC$physical_activity  == 2, 1, 0)
+NHANES_CC$No_ACT <- ifelse(test = NHANES_CC$physical_activity  == 3, 1, 0)
+
+table(NHANES_CC$Vig_ACt)
+sum(NHANES_CC$Mod_ACT, na.rm = TRUE)
+table(NHANES_CC$Mod_ACT)
+sum(NHANES_CC$No_ACT, na.rm = TRUE)
+
+dum_fit <- lm(LBXSBU ~1 + Male + Vig_ACt + Mod_ACT + No_ACT + SCr_elevated + Exactage, data = NHANES_CC)
+summary(dum_fit)
+tab_model(dum_fit)
+plot(dum_fit)
+
+
+
+library(dplyr)
+library(tidyr)
+library(broom)
+
+#if needed 
+res <- residuals(fit2)
+yhat <- fitted(fit2)
+plot(yhat, res)
+scatter.smooth(yhat, res, lpars = list(col = "red"))
+
+lin_age <- lm(LBXSBU ~1 + Exactage, data = NHANES_CC)
+summary(lin_age)
+plot(lin_age)
+
+plot(LBXSBU ~1 + Exactage, data = NHANES_CC)
+
+
+
+
+```
