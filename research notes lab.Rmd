@@ -129,7 +129,7 @@ You can also embed plots, for example:
 
 #creatinine dummy vars
 #I didnt think it was necessary to normalize the data for creatinin since
-#we are using these criteria here 
+#we are using these criteria below 
 
 ?NA
 NHANES_CC$SCr_elevated<-NA
